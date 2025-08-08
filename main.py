@@ -1,152 +1,55 @@
-import telebot
-import os
-import json
-from dotenv import load_dotenv
-
+# main.py
+ 
+import telebot import json import os from dotenv import load_dotenv from telebot import types from datetime import datetime
+ 
 load_dotenv()
-BOT_TOKEN = os.getenv("8414826538:AAESRvyfwhA6xfZ0laUc6rHuqvkEvyBTHrM")
-ADMIN_ID = os.getenv("7944027261")
-
+ 
+BOT_TOKEN = os.getenv("8414826538:AAESRvyfwhA6xfZ0laUc6rHuqvkEvyBTHrM") ADMIN_ID = int(os.getenv("7944027261"))
+ 
 bot = telebot.TeleBot(BOT_TOKEN)
-
-USERS_FILE = "users.json"
-
-def load_users():
-    try:
-        with open(USERS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_users(data):
-    with open(USERS_FILE, "w") as f:
-        json.dump(data, f)
-
-users = load_users()
-
-def is_vip(user):
-    return users.get(str(user), {}).get("vip", False)
-
-def get_balance(user):
-    return users.get(str(user), {}).get("balance", 0)
-
-def update_user(user_id, field, value):
-    if str(user_id) not in users:
-        users[str(user_id)] = {"balance": 0, "vip": False, "orders": []}
-    users[str(user_id)][field] = value
-    save_users(users)
-
-@bot.message_handler(commands=["start"])
-def start(message):
-    user_id = str(message.chat.id)
-    if user_id not in users:
-        users[user_id] = {"balance": 0, "vip": False, "orders": []}
-        save_users(users)
-    bot.reply_to(message, "أهلاً بك في البوت! استخدم /store لعرض المنتجات، /recharge للشحن.")
-
-@bot.message_handler(commands=["recharge"])
-def recharge(message):
-    if str(message.chat.id) != ADMIN_ID:
-        bot.reply_to(message, "❌ ليس لديك صلاحيات.")
-        return
-    bot.reply_to(message, "🛠 أرسل الأمر بصيغة:\n\n+123456789\nأو\n-123456789\nأو\nvip user_id")
-
-@bot.message_handler(commands=["store"])
-def store(message):
-    balance = get_balance(message.chat.id)
-    vip_status = "✅ VIP" if is_vip(message.chat.id) else "❌ عادي"
-    bot.send_message(message.chat.id, f"""📦 المتجر:
-
-1. منتج A - 5$
-2. منتج B - 10$
-
-💰 الرصيد: {balance}$
-👤 الحالة: {vip_status}
-
-للشراء أرسل: /order رقم_المنتج
-""")
-
-@bot.message_handler(commands=["order"])
-def order(message):
-    user_id = str(message.chat.id)
-    parts = message.text.split()
-    if len(parts) != 2:
-        bot.reply_to(message, "❌ استخدم: /order رقم_المنتج")
-        return
-
-    item = parts[1]
-    prices = {"1": 5, "2": 10}
-    if item not in prices:
-        bot.reply_to(message, "❌ المنتج غير موجود.")
-        return
-
-    price = prices[item]
-    if is_vip(user_id):
-        price = int(price * 0.8)  # خصم 20%
-
-    balance = get_balance(user_id)
-    if balance < price:
-        bot.reply_to(message, "❌ لا يوجد رصيد كافي.")
-        return
-
-    update_user(user_id, "balance", balance - price)
-    users[user_id]["orders"].append(item)
-    save_users(users)
-    bot.send_message(message.chat.id, f"✅ تم شراء المنتج {item} بنجاح!")
-
-@bot.message_handler(commands=["users"])
-def list_users(message):
-    if str(message.chat.id) != ADMIN_ID:
-        return
-    msg = "👥 المستخدمين:\n"
-    for uid, info in users.items():
-        msg += f"ID: {uid}, Balance: {info.get('balance', 0)}, VIP: {info.get('vip', False)}\n"
-    bot.reply_to(message, msg)
-
-@bot.message_handler(commands=["broadcast"])
-def broadcast(message):
-    if str(message.chat.id) != ADMIN_ID:
-        return
-    bot.send_message(message.chat.id, "✉️ أرسل الرسالة التي تريد إرسالها لكل المستخدمين.")
-
-    @bot.message_handler(func=lambda m: True)
-    def send_broadcast(msg):
-        for uid in users.keys():
-            try:
-                bot.send_message(uid, f"📢 رسالة من الأدمن:\n\n{msg.text}")
-            except:
-                continue
-        bot.send_message(message.chat.id, "✅ تم إرسال الرسالة.")
-        bot.clear_step_handler_by_chat_id(message.chat.id)
-
-@bot.message_handler(func=lambda msg: msg.text.startswith(('+', '-', 'vip')))
-def admin_commands(message):
-    if str(message.chat.id) != ADMIN_ID:
-        return
-
-    if message.text.startswith("+"):
-        parts = message.text[1:].split()
-        uid = parts[0] if len(parts) > 1 else message.chat.id
-        uid = str(uid)
-        balance = get_balance(uid) + int(parts[0])
-        update_user(uid, "balance", balance)
-        bot.send_message(message.chat.id, f"✅ تم إضافة رصيد. الرصيد الحالي: {balance}$")
-
-    elif message.text.startswith("-"):
-        parts = message.text[1:].split()
-        uid = parts[0] if len(parts) > 1 else message.chat.id
-        uid = str(uid)
-        balance = get_balance(uid) - int(parts[0])
-        update_user(uid, "balance", balance)
-        bot.send_message(message.chat.id, f"✅ تم خصم رصيد. الرصيد الحالي: {balance}$")
-
-    elif message.text.startswith("vip"):
-        parts = message.text.split()
-        if len(parts) < 2:
-            bot.send_message(message.chat.id, "❌ استخدم: vip user_id")
-            return
-        uid = parts[1]
-        update_user(uid, "vip", True)
-        bot.send_message(message.chat.id, f"✅ تم تفعيل VIP للمستخدم {uid}")
-
+ 
+# ========== قواعد بيانات بسيطة ==========
+ 
+USERS_FILE = "users.json" PRODUCTS_FILE = "products.json" ORDERS_FILE = "orders.json"
+ 
+# ========== أدوات المساعدة ==========
+ 
+def load_data(file): if not os.path.exists(file): with open(file, 'w') as f: json.dump({}, f) with open(file, 'r') as f: return json.load(f)
+ 
+def save_data(file, data): with open(file, 'w') as f: json.dump(data, f, indent=2)
+ 
+# ========== تسجيل المستخدم ==========
+ 
+@bot.message_handler(commands=['start']) def handle_start(message): users = load_data(USERS_FILE) user_id = str(message.chat.id) if user_id not in users: users[user_id] = { "username": message.from_user.username or "-", "balance": 0, "vip": False, "orders": [], "joined": str(datetime.now()) } save_data(USERS_FILE, users) bot.send_message(message.chat.id, "👋 مرحبًا بك في بوت المتجر!")
+ 
+# ========== عرض الرصيد ==========
+ 
+@bot.message_handler(commands=['balance']) def check_balance(message): users = load_data(USERS_FILE) user = users.get(str(message.chat.id), {}) balance = user.get("balance", 0) vip = "✅ نعم" if user.get("vip") else "❌ لا" bot.send_message(message.chat.id, f"💰 رصيدك: {balance} نقطة\n💎 VIP: {vip}")
+ 
+# ========== أوامر الأدمن ==========
+ 
+@bot.message_handler(commands=['admin']) def admin_panel(message): if message.chat.id != ADMIN_ID: return bot.send_message(message.chat.id, "🚫 لا تملك صلاحية.")
+ `markup = types.InlineKeyboardMarkup() markup.add(types.InlineKeyboardButton("➕ شحن رصيد", callback_data="add_balance")) markup.add(types.InlineKeyboardButton("📦 عرض الطلبات", callback_data="view_orders")) bot.send_message(message.chat.id, "🔧 لوحة التحكم:", reply_markup=markup) ` 
+# ========== استقبال أزرار الأدمن ==========
+ 
+@bot.callback_query_handler(func=lambda call: True) def handle_callbacks(call): if call.message.chat.id != ADMIN_ID: return
+ `if call.data == "add_balance":     msg = bot.send_message(call.message.chat.id, "أرسل: user_id amount")     bot.register_next_step_handler(msg, process_balance_addition)  elif call.data == "view_orders":     orders = load_data(ORDERS_FILE)     if not orders:         bot.send_message(call.message.chat.id, "لا توجد طلبات.")     else:         text = "\n".join([f"{k}: {v['product']} - {v['status']}" for k, v in orders.items()])         bot.send_message(call.message.chat.id, f"📦 الطلبات:\n{text}") ` 
+# ========== إضافة رصيد للمستخدم ==========
+ 
+def process_balance_addition(message): try: user_id, amount = message.text.split() users = load_data(USERS_FILE) users[user_id]["balance"] += int(amount) save_data(USERS_FILE, users) bot.send_message(message.chat.id, "✅ تم شحن الرصيد.") except: bot.send_message(message.chat.id, "❌ صيغة خاطئة. جرب: user_id amount")
+ 
+# ========== أمر شراء وهمي ==========
+ 
+@bot.message_handler(commands=['buy']) def handle_buy(message): users = load_data(USERS_FILE) user_id = str(message.chat.id) user = users.get(user_id) if not user: return bot.send_message(message.chat.id, "❌ أنت غير مسجل.")
+ `if user['balance'] < 10:     return bot.send_message(message.chat.id, "❌ رصيد غير كافٍ.")  user['balance'] -= 10 save_data(USERS_FILE, users)  orders = load_data(ORDERS_FILE) order_id = str(len(orders)+1) orders[order_id] = {     "user": user_id,     "product": "منتج تجريبي",     "status": "✅ مكتمل",     "time": str(datetime.now()) } save_data(ORDERS_FILE, orders) bot.send_message(message.chat.id, "🎉 تم شراء المنتج بنجاح!") ` 
+# ========== شحن الرصيد ==========
+ 
+@bot.message_handler(commands=['recharge']) def handle_recharge(message): bot.send_message(message.chat.id, "💳 الرجاء التواصل مع الأدمن لشحن الرصيد.")
+ 
+# ========== مشاركة البوت ==========
+ 
+@bot.message_handler(commands=['share']) def share_bot(message): link = f"[https://t.me/{bot.get_me().username}](https://t.me/{bot.get_me().username})" bot.send_message(message.chat.id, f"📢 شارك البوت مع أصدقائك:\n{link}")
+ 
+# ========== تشغيل البوت ==========
+ 
 bot.infinity_polling()
